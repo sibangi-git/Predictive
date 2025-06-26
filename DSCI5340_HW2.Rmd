@@ -1,0 +1,278 @@
+---
+title: "DSCI5340_HW2_Group9"
+output: html_document
+date: "2025-02-13"
+---
+
+```{r}
+pacman::p_load(ggplot2, dplyr, lubridate, readr, tsibble, fable, forecast, fastDummies, lmtest, zoo, tidyverse, feasts)
+```
+
+## Question:1
+
+```{r}
+passenger <- read.csv("ATL_MAD_Passenger_2010_2023.csv", fileEncoding = "UTF-8")
+
+# Convert date column to Date format
+passenger$date <- as.Date(passenger$date, format = "%m/%d/%Y")
+
+# Convert scheduled and total passengers to numeric
+passenger$scheduled <- as.numeric(gsub(",", "", passenger$scheduled))
+passenger$total <- as.numeric(gsub(",", "", passenger$total))
+
+# Extract year and month
+passenger$year <- year(passenger$date)
+passenger$month <- month(passenger$date, label = TRUE)
+
+# Distinct Values
+passenger %>% summarise(across(everything(), n_distinct))
+
+```
+## Question:2
+
+```{r}
+# Check structure of the data
+ggplot(passenger, aes(x = date, y = total, group = 1)) +
+  geom_line(color = "blue") +
+  labs(title = "Monthly International Passengers (ATL to MAD)",
+       x = "Date", y = "Total Passengers") +
+  theme_minimal()
+```
+
+There's a significant drop in passenger numbers around 2020-2021, likely due to the COVID-19 pandemic.Passenger numbers start to recover after 2021 until 2023 when the data ceases.
+
+```{r}
+
+# Aggregate average passengers per month
+monthly_avg <- passenger %>%
+  group_by(month) %>%
+  summarise(avg_passengers = mean(total, na.rm = TRUE))
+monthly_avg
+
+# Plot average passenger trend by month
+ggplot(monthly_avg, aes(x = month, y = avg_passengers, group = 1)) +
+  geom_line(color = "darkgreen", size = 1) +
+  geom_point(color = "red", size = 2) +
+  labs(title = "Seasonal Pattern: Avg Monthly Passengers (2010-2023)",
+       x = "Month", y = "Average Passengers") +
+  theme_minimal()
+
+# Passengers by month
+ggplot(passenger, aes(x = month, y = total)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  labs(title = "Distribution of Monthly Passengers (ATL-MAD)",
+       x = "Month", y = "Total Passengers") +
+  theme_minimal()
+```
+
+### Monthly Passengers:
+    - Clear seasonal pattern in passenger travel between Atlanta and Madrid. Passenger numbers are lowest in January and February, with little change from year to year. They start to increase in March and April, reaching their highest levels in May to September. In the fall (October-November), there is a sharp drop, but December sees a small increase again.The wide range of values during the summer months suggests that passenger numbers vary a lot from year to year, possibly due to factors like holidays, economic conditions, and special events. Some outliers appear in different months, showing unusual situations that caused big changes in passenger numbers in certain years.
+
+```{r}
+# Yearly passenger totals
+yearly_trend <- passenger %>%
+  group_by(year) %>%
+  summarise(total_passengers = sum(total, na.rm = TRUE))
+
+# Line chart for yearly trends
+ggplot(yearly_trend, aes(x = year, y = total_passengers)) +
+  geom_line(color = "purple", size = 1.2) +
+  geom_point(color = "orange", size = 2) +
+  labs(title = "Total Annual Passengers (ATL-MAD: 2010-2023)",
+       x = "Year", y = "Total Passengers") +
+  theme_minimal()
+
+# Passengers by Year
+ggplot(passenger, aes(x = factor(year), y = total)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  labs(title = "Passenger Distribution by Year",
+       x = "Year",
+       y = "Total Passengers") +
+  theme_minimal()
+```
+
+
+### Yearly passenger totals
+    - Over the years, more and more people have been traveling between Atlanta and Madrid, with a steady rise in passenger numbers. However, something unusual happened in 2020 and 2021—a sharp decline in travelers. This was likely due to COVID-19 travel restrictions, which made flying difficult. Before the pandemic, passenger traffic was increasing. After the drop, travel started picking up again as restrictions eased, eventually surpassing pre-pandemic levels. The line chart clearly illustrates the dip around 2020, and 2021. The boxplot of the passenger distribution by year shows the annual ranges clearly. From 2010 to 2019, passenger numbers remained fairly stable. In 2022, 2023, and 2024, the number of travelers increased again, showing a strong recovery in air travel.This pattern highlights how air travel usually grows over time but can be affected by unexpected events like a global pandemic.
+    
+
+## Question:3
+
+```{r}
+passenger$month <- as.numeric(format(passenger$date, "%m"))
+passenger$year <- as.numeric(format(passenger$date, "%Y"))
+
+# Log Transform Total Passengers (address heteroscedasticity)
+passenger$log_total <- log(passenger$total)
+
+passenger <- passenger %>%
+  mutate(lag_log_total = lag(log_total, 1))
+
+# Create a time trend variable (number of months since the beginning of the series)
+passenger <- passenger %>% slice(3:n())
+passenger$time_trend <- 1:nrow(passenger)
+
+# Create dummy variables for months
+passenger <- passenger %>%
+  mutate(month_factor = factor(month)) %>%  # Create a factor variable for month
+  dummy_cols(select_columns = "month_factor", remove_first_dummy = TRUE)  # Create dummies
+
+# Run the regression with lagged variables
+model_lagged <- lm(log_total ~  month_factor_3 + month_factor_4 + month_factor_5 + month_factor_6 + month_factor_7 +
+              month_factor_8 + month_factor_9 + month_factor_10 + month_factor_11 + 
+              month_factor_12 + lag_log_total, data = passenger)
+
+summary(model_lagged)
+
+# Create a data frame with original and fitted values
+fitted_vs_actual <- data.frame(
+  Date = passenger$date,  
+  Actual = passenger$log_total,  # Original log-transformed total passengers
+  Fitted = model_lagged$fitted.values
+)
+
+# Optional: Create a visualization
+ggplot(fitted_vs_actual, aes(x = Date)) +
+  geom_line(aes(y = Actual, color = "Actual")) +
+  geom_line(aes(y = Fitted, color = "Fitted")) +
+  labs(title = "Actual vs Fitted Values", x = "Date", y = "Log Total Passengers") +
+  scale_color_manual(values = c("Actual" = "blue", "Fitted" = "red")) +
+  theme_minimal()
+
+# Convert residuals to a data frame
+residuals_df <- data.frame(Index = 1:length(model_lagged$residuals), Residuals = model_lagged$residuals)
+
+# Create the residual plot using ggplot2
+ggplot(residuals_df, aes(x = Index, y = Residuals)) +
+  geom_line(color = "blue") + 
+  labs(title = "Residuals Plot", x = "Index", y = "Residuals") +
+  theme_minimal()
+
+
+acf(model_lagged$residuals, main = "ACF of Residuals")  # Checks for autocorrelation
+
+Box.test(model_lagged$residuals, lag = 10, type = "Ljung-Box")
+
+hist(model_lagged$residuals, breaks = 20, col = "lightblue", main = "Histogram of Residuals")
+
+```
+
+
+## Why we chose this model:
+
+We chose this model because it had the best R-squared and adjusted R-squared values compared to other models. The residuals were also close to white noise, due to the Ljung Box test offering the null hypothesis of the residuals being white noise, the P-value is greater than .05; meaning we fail to reject the null hypothesis. By adding **lagged log values** (lag_log_total), we significantly reduced autocorrelation at lag 1, leading to a more accurate model. The R-squared (~70%) confirms that the model explains most of the variance. Using lagged variables improves predictions while keeping other variables meaningful, making the model both reliable and easy to interpret. This method is simpler than ARIMA but still effectively captures the relationship between past and current passenger counts. Using lagged variables improves predictions while keeping other variables meaningful, making the model both reliable and easy to interpret.
+
+### Past Models:  
+
+Initially, we experimented with models that included a time trend, monthly dummies, log-transformed passenger counts, and a quadratic time trend (time_trend^2). However, these models showed strong autocorrelation, and the Ljung-Box test results indicated they did not fully capture time-dependent patterns.
+
+**Here are the models we tested:**
+
+model1 <- tslm(passengerts ~ trend + season)
+
+model2 <- tslm(passengerts ~ trend + season + passenger$lag_total)
+
+model3 <- lm(total ~ time_trend + month_factor_2 + month_factor_3 + month_factor_4 +
+               month_factor_5 + month_factor_6 + month_factor_7 + month_factor_8 +
+               month_factor_9 + month_factor_10 + month_factor_11 + month_factor_12,
+             data = passenger_data)
+             
+model4 <- lm(total ~ time_trend + time_trend_squared + month_factor_2 + month_factor_3 + month_factor_4 +
+               month_factor_5 + month_factor_6 + month_factor_7 + month_factor_8 +
+               month_factor_9 + month_factor_10 + month_factor_11 + month_factor_12,
+             data = passenger_data)
+             
+model5 <- lm(log(total) ~ time_trend + month_factor_2 + month_factor_3 + month_factor_4 +
+               month_factor_5 + month_factor_6 + month_factor_7 + month_factor_8 +
+               month_factor_9 + month_factor_10 + month_factor_11 + month_factor_12,
+             data = passenger_data)
+             
+model6 <- lm(log_total ~ time_trend + month_factor_2 + month_factor_3 + month_factor_4 + 
+              month_factor_5 + month_factor_6 + month_factor_7 + month_factor_8 + 
+              month_factor_9 + month_factor_10 + month_factor_11 + month_factor_12 + lag_log_total,
+            data = passenger)
+             
+While these models helped understand trends and seasonality, they still suffered from autocorrelation. By incorporating lagged log values, we addressed this issue and improved model performance significantly. 
+
+## Question:4
+
+```{r}
+# Create a data frame for the next 12 months
+forecast_data <- data.frame(date = seq(tail(passenger$date, 1) + months(1), by = "month", length.out = 12))
+
+# Extract month for dummy variables and create time trend
+forecast_data$month <- as.numeric(format(forecast_data$date, "%m"))
+forecast_data$year <- as.numeric(format(forecast_data$date, "%Y"))
+forecast_data$time_trend <- (nrow(passenger) + 1):(nrow(passenger) + 12)
+
+# Create month factor and dummy variables
+forecast_data <- forecast_data %>%
+  mutate(month_factor = factor(month)) %>%
+  dummy_cols(select_columns = "month_factor", remove_first_dummy = TRUE)
+
+# Impute lag using the last actual value
+forecast_data$lag_log_total <- tail(passenger$log_total, 1)
+
+# Predict log_total using the regression model
+forecast_data$total_forecast <- exp(predict(model_lagged, newdata = forecast_data))
+
+# Print only date and total_forecast
+forecast_data %>% select(date, total_forecast) %>% print()
+
+
+
+# Combine historical data and forecast data for plotting. Ensure the forecast period dates are in the correct format
+combined_data <- bind_rows(data.frame(date = passenger$date, total = passenger$total, type = "Historical"),
+                           data.frame(date = forecast_data$date, total = forecast_data$total_forecast, type = "Forecast"))
+
+# Create the plot
+ggplot(combined_data, aes(x = date, y = total, color = type)) +
+  geom_line() +
+  labs(title = "Passenger Forecast",
+       x = "Date",
+       y = "Total Passengers") +
+  scale_color_manual(values = c("Historical" = "black", "Forecast" = "red")) +
+  theme_minimal()
+```
+
+#------------------------------------ARIMA-------------------------------------
+
+```{r}
+# Convert to Time Series
+passengerts <- passenger|>
+  mutate(date = yearmonth(date)) |>               
+  as_tsibble(index = date) |>                     
+  fill_gaps() |>                                  
+  mutate(total = if_else(is.na(total), 0, total))
+
+# Fit ARIMA model
+model_arima <- passengerts |>
+  model(
+    arima_reg = ARIMA(total ~ trend() + season())
+  )
+report(model_arima)
+# Forecast next 12 months
+forecast_arima <- forecast(model_arima, h = 12) 
+
+# Print forecasted values
+print(forecast_arima)
+
+# Plot the forecast 
+autoplot(forecast_arima,passengerts) +
+  ggtitle("12-Month Passenger Forecast") +
+  xlab("Date") +
+  ylab("Total Passengers") +
+  theme_minimal()
+
+# Check residual patterns
+model_arima |>
+  gg_tsresiduals() +
+  labs(title = "Residual Diagnostics")
+
+# Ljung-Box Test for ARIMA Residuals
+model_arima |>
+  augment() |>
+  features(.resid, ljung_box, lag = 12)
+```
+
+We also selected an ARIMA model for our 12-month passenger forecast because it's well-suited to capturing underlying trends and seasonal patterns in time series data, particularly with a limited dataset of 156 points. This method shines due to its strong and flexible performance in short-term forecasts. Furthermore, the Ljung-Box test yielded a high p-value (0.9554), indicating that the model effectively addressed any significant autocorrelation in the residuals, allowing for reliable inferences and predictions.

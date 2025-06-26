@@ -1,0 +1,142 @@
+---
+title: "DSCI5340_HW1_Group9"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+date: "2025-02-06"
+---
+
+```{r loadpackages, message=FALSE, warning=FALSE}
+
+pacman::p_load(fpp3, lubridate, tidyverse, dplyr, GGally, gridExtra)
+theme_set(theme_classic())
+```
+
+
+```{r}
+aus_vehicle_sales %>%
+  ggplot(aes(x = Month, y = Count, color = Type)) +
+  geom_line() +
+  labs(title = "Vehicle Sales by Category",
+       x = "Year",
+       y = "Number of Vehicles Sold",
+       color = "Vehicle Type") +
+  theme_minimal()
+
+# Separate charts for each Type
+# Filter for Type = "Other"
+passenger_sales <- aus_vehicle_sales %>%
+  filter(Type == "Passenger")
+
+# Filter for Type = "Other"
+suv_sales <- aus_vehicle_sales %>%
+  filter(Type == "SUV")
+
+# Filter for Type = "Other"
+other_sales <- aus_vehicle_sales %>%
+  filter(Type == "Other")
+
+# Plot Passenger
+ggplot(passenger_sales, aes(x = Month, y = Count)) +
+  geom_line(color = "green") +  
+  labs(
+    title = "Vehicle Sales for 'Passenger' Category",
+    x = "Year",
+    y = "Number of Vehicles Sold"
+  ) +
+  theme_minimal()
+
+# Plot SUV
+ggplot(suv_sales, aes(x = Month, y = Count)) +
+  geom_line(color = "blue") +  
+  labs(
+    title = "Vehicle Sales for 'SUV' Category",
+    x = "Year",
+    y = "Number of Vehicles Sold"
+  ) +
+  theme_minimal()
+
+# Plot Other
+ggplot(other_sales, aes(x = Month, y = Count)) +
+  geom_line(color = "red") +  
+  labs(
+    title = "Vehicle Sales for 'Other' Category",
+    x = "Year",
+    y = "Number of Vehicles Sold"
+  ) +
+  theme_minimal()
+
+```
+
+## Detailed analysis of the trends, seasonality, and cycles, along with elaborations:
+
+**Passenger Vehicles (Green Line)** After 2005, passenger car sales showed a comparatively flat to slightly declining trend. This might suggest that the market is saturated or that consumers are becoming less interested in conventional passenger cars and shifting towards SUVs.Seasonal patterns are evident, with consistent peaks and troughs. Sales tend to rise at the end of the year, likely driven by holiday promotions and new model releases. At the same time, dips occur at the beginning of the year due to reduced consumer spending after the holiday season. While seasonal fluctuations are prominent, there are no clear long-term cycles affecting vehicle sales.
+
+**SUVs (Blue Line)** SUV sales have shown a strong upward trend, particularly since the mid-2000s. This steady growth reflects their increasing popularity, driven by factors such as practicality, safety, and effective marketing strategies. While there are some seasonal fluctuations, they are less pronounced compared to passenger cars. The continuous rise in demand over the years tends to overshadow seasonal effects. No clear long-term cycles are evident in the data for SUVs.
+
+**Other Vehicles (Red Line)** Sales of other vehicles show a gradual upward trend. However, their overall volume remains significantly smaller compared to passenger cars and SUVs. Seasonal patterns are present but less consistent, with fluctuations that may be influenced by outside factors Unlike passenger cars and SUVs, this category experiences irregular ups and downs, suggesting that short-term economic shifts within their target industries play a role. As a result, its sales pattern is less stable than the other two categories.
+
+**Key Observations** Passenger vehicle sales appear to have reached saturation, initially remaining flat before gradually declining. In contrast, SUVs demonstrate steady and rapid growth, becoming the dominant market segment. Sales of other vehicles show slow but consistent growth, primarily serving a niche market. Seasonal fluctuations are most pronounced in passenger vehicles, while SUVs experience moderate seasonality with relatively stable demand. Other vehicles exhibit irregular seasonal patterns, likely influenced by broader economic conditions and other outside factors. There are no clear long-term cycles present in the data.
+
+```{r}
+suv_sales <- aus_vehicle_sales %>%
+  filter(Type == "SUV")
+
+# Plot the original SUV sales series
+original_plot <- ggplot(suv_sales, aes(x = Month, y = Count)) +
+  geom_line(color = "blue") +
+  labs(title = "Original SUV Sales",
+       x = "Month",
+       y = "Sales Count")+
+  theme_minimal()
+original_plot
+
+## Box-Cox Transformation
+lamda <- suv_sales %>%
+  features(Count, features = guerrero)
+lamda
+
+suv_sales <- suv_sales %>%
+  mutate(Transformed_Count = box_cox(Count, 0.222))
+
+# Plot Transformed Data
+transformed_plot <- ggplot(suv_sales, aes(x = Month, y = Transformed_Count)) +
+  geom_line(color = "blue") +
+  labs(title = "Box-Cox Transformed SUV Sales",
+       x = "Month",
+       y = "Transformed Sales Count") +
+  theme_minimal()
+
+# Display the plots side by side
+grid.arrange(original_plot, transformed_plot, nrow = 2)
+```
+
+## The original vs Box-Cox transformed SUV sales data
+
+The variance in the original chart is a lot more volatile compared to the stabilized variance in the Box-Cox chart. The transformed Box-Cox chart is easier to read and to find patterns in the sales over time. Consistent variance helps the spikes to be more steady which is needed to have better decision making analyses with this kind of data.
+
+```{r}
+# STL Decomposition on Box-Cox Transformed Series
+dcmp <- suv_sales %>%
+  model(stl = STL(Transformed_Count))
+components(dcmp)
+
+# Plot STL components
+components(dcmp) %>% autoplot() + xlab("Year")
+```
+
+
+```{r}
+# Seasonally-Adjusted component
+suv_sales %>%
+  autoplot(Transformed_Count, color = 'gray') +
+  autolayer(components(dcmp),season_adjust, color = 'blue') +
+  xlab("Year") + 
+  ylab("Sales Count") +
+  ggtitle("SUV Sales - Seasonally Adjusted")
+```
+
+## Observation on seasonally-adjusted 
+
+By adjusting the seasonality ranges found over time in the chart, this helps create a more solid trend line. The pre-existing grey line from before is still in the background to provide context of the seasonal spikes. We see a steady upward trend over-all. The period from January 2010 to January 2015 has an impressive jump, something that wouldn’t be as noticeable without the seasonality adjustment.
