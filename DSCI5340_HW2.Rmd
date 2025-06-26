@@ -1,9 +1,3 @@
----
-title: "DSCI5340_HW2_Group9"
-output: html_document
-date: "2025-02-13"
----
-
 ```{r}
 pacman::p_load(ggplot2, dplyr, lubridate, readr, tsibble, fable, forecast, fastDummies, lmtest, zoo, tidyverse, feasts)
 ```
