@@ -154,13 +154,13 @@ hist(model_lagged$residuals, breaks = 20, col = "lightblue", main = "Histogram o
 
 ## Why we chose this model:
 
-We chose this model because it had the best R-squared and adjusted R-squared values compared to other models. The residuals were also close to white noise, due to the Ljung Box test offering the null hypothesis of the residuals being white noise, the P-value is greater than .05; meaning we fail to reject the null hypothesis. By adding **lagged log values** (lag_log_total), we significantly reduced autocorrelation at lag 1, leading to a more accurate model. The R-squared (~70%) confirms that the model explains most of the variance. Using lagged variables improves predictions while keeping other variables meaningful, making the model both reliable and easy to interpret. This method is simpler than ARIMA but still effectively captures the relationship between past and current passenger counts. Using lagged variables improves predictions while keeping other variables meaningful, making the model both reliable and easy to interpret.
+I chose this model because it had the best R-squared and adjusted R-squared values compared to other models. The residuals were also close to white noise, due to the Ljung Box test offering the null hypothesis of the residuals being white noise, the P-value is greater than .05; meaning I fail to reject the null hypothesis. By adding **lagged log values** (lag_log_total), I significantly reduced autocorrelation at lag 1, leading to a more accurate model. The R-squared (~70%) confirms that the model explains most of the variance. Using lagged variables improves predictions while keeping other variables meaningful, making the model both reliable and easy to interpret. This method is simpler than ARIMA but still effectively captures the relationship between past and current passenger counts. Using lagged variables improves predictions while keeping other variables meaningful, making the model both reliable and easy to interpret.
 
 ### Past Models:  
 
-Initially, we experimented with models that included a time trend, monthly dummies, log-transformed passenger counts, and a quadratic time trend (time_trend^2). However, these models showed strong autocorrelation, and the Ljung-Box test results indicated they did not fully capture time-dependent patterns.
+Initially, I experimented with models that included a time trend, monthly dummies, log-transformed passenger counts, and a quadratic time trend (time_trend^2). However, these models showed strong autocorrelation, and the Ljung-Box test results indicated they did not fully capture time-dependent patterns.
 
-**Here are the models we tested:**
+**Here are the models I tested:**
 
 model1 <- tslm(passengerts ~ trend + season)
 
@@ -186,7 +186,7 @@ model6 <- lm(log_total ~ time_trend + month_factor_2 + month_factor_3 + month_fa
               month_factor_9 + month_factor_10 + month_factor_11 + month_factor_12 + lag_log_total,
             data = passenger)
              
-While these models helped understand trends and seasonality, they still suffered from autocorrelation. By incorporating lagged log values, we addressed this issue and improved model performance significantly. 
+While these models helped understand trends and seasonality, they still suffered from autocorrelation. By incorporating lagged log values, I addressed this issue and improved model performance significantly. 
 
 ## Question:4
 
@@ -269,4 +269,4 @@ model_arima |>
   features(.resid, ljung_box, lag = 12)
 ```
 
-We also selected an ARIMA model for our 12-month passenger forecast because it's well-suited to capturing underlying trends and seasonal patterns in time series data, particularly with a limited dataset of 156 points. This method shines due to its strong and flexible performance in short-term forecasts. Furthermore, the Ljung-Box test yielded a high p-value (0.9554), indicating that the model effectively addressed any significant autocorrelation in the residuals, allowing for reliable inferences and predictions.
+I also selected an ARIMA model for our 12-month passenger forecast because it's well-suited to capturing underlying trends and seasonal patterns in time series data, particularly with a limited dataset of 156 points. This method shines due to its strong and flexible performance in short-term forecasts. Furthermore, the Ljung-Box test yielded a high p-value (0.9554), indicating that the model effectively addressed any significant autocorrelation in the residuals, allowing for reliable inferences and predictions.
